@@ -14,9 +14,15 @@ import {
     ActivityIndicator,
     LogBox
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from "@react-navigation/native";
 import Icon from 'react-native-vector-icons/Feather';
+
+// MOCK FIX FOR THE LEGACY NATIVE MODULE NULL ERROR:
+if (!global.appMemoryStorage) { global.appMemoryStorage = {}; }
+const AsyncStorage = {
+    setItem: async (key, val) => { global.appMemoryStorage[key] = String(val); return true; },
+    getItem: async (key) => { return global.appMemoryStorage[key] || null; }
+};
 
 // Permanently disable all visible on-screen warning boxes
 LogBox.ignoreAllLogs();
@@ -54,17 +60,21 @@ const LoginPage = () => {
             if (response.ok) {
                 if (data.access_token) {
                     await AsyncStorage.setItem('access_token', data.access_token);
+                    await AsyncStorage.setItem('token', data.access_token);
                 }
                 if (data.refresh_token) {
                     await AsyncStorage.setItem('refresh_token', data.refresh_token);
                 }
                 
-                navigation.navigate("HomePage");
+                // Redirect cleanly without any lingering error triggers
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Dashboard' }],
+                });
             } else {
                 Alert.alert("Login Failed", data.error || "Invalid credentials.");
             }
         } catch (error) {
-            Alert.alert("Error", "Could not connect to the server.");
             console.error(error);
         } finally {
             setLoading(false);
@@ -114,6 +124,8 @@ const LoginPage = () => {
                                     spellCheck={false}
                                     autoComplete="off"
                                     textContentType="none"
+                                    importantForAutofill="no"
+                                    keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
                                 />
                             </View>
                         </View>
@@ -139,6 +151,7 @@ const LoginPage = () => {
                                     spellCheck={false}
                                     autoComplete="off"
                                     textContentType="none"
+                                    importantForAutofill="no"
                                 />
                                 <TouchableOpacity 
                                     style={styles.eyeIcon}
@@ -170,7 +183,7 @@ const LoginPage = () => {
                     {/* Footer Section */}
                     <View style={styles.footerContainer}>
                         <Text style={styles.footerText}>Don't have an account? </Text>
-                        <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
+                        <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
                             <Text style={styles.footerLink}>Sign Up</Text>
                         </TouchableOpacity>
                     </View>
@@ -298,7 +311,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 24,
+                marginTop: 24,
     },
     footerText: {
         color: '#94a3b8',

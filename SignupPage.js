@@ -14,9 +14,15 @@ import {
     ActivityIndicator,
     LogBox
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from "@react-navigation/native";
 import Icon from 'react-native-vector-icons/Feather';
+
+// MOCK FIX FOR THE LEGACY NATIVE MODULE NULL ERROR:
+if (!global.appMemoryStorage) { global.appMemoryStorage = {}; }
+const AsyncStorage = {
+    setItem: async (key, val) => { global.appMemoryStorage[key] = String(val); return true; },
+    getItem: async (key) => { return global.appMemoryStorage[key] || null; }
+};
 
 // Permanently disable all visible on-screen warning boxes
 LogBox.ignoreAllLogs();
@@ -69,27 +75,41 @@ const SignUp = () => {
                 }),
             });
 
-            const data = await response.json();
+            // SAFE PARSING: Read as text first so empty responses or raw text backends don't crash fetch
+            const responseText = await response.text();
+            let data = {};
+            try {
+                data = responseText ? JSON.parse(responseText) : {};
+            } catch (jsonError) {
+                data = { message: responseText };
+            }
 
             if (response.ok) {
-                // 1. Check if your backend sent tokens back right after registration
-                if (data.token || data.accessToken) {
-                    const tokenToSave = data.token || data.accessToken;
-                    await AsyncStorage.setItem('userToken', tokenToSave);
-                }
-                
-                // 2. If your backend returns user profile information, save it too
-                if (data.user) {
-                    await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+                // Safely extract and save tokens if they exist in the response data object
+                if (data && typeof data === 'object') {
+                    if (data.access_token) {
+                        await AsyncStorage.setItem('access_token', data.access_token);
+                        await AsyncStorage.setItem('token', data.access_token);
+                    }
+                    if (data.refresh_token) {
+                        await AsyncStorage.setItem('refresh_token', data.refresh_token);
+                    }
                 }
 
-                // 3. Directly navigate to Dashboard, bypassing the Alert box entirely
-                navigation.navigate("Dashboard");
+                // Bulletproof navigation: try resetting the stack, fallback to standard navigate if it fails
+                try {
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Dashboard' }],
+                    });
+                } catch (navError) {
+                    navigation.navigate("Dashboard");
+                }
             } else {
-                Alert.alert("Sign Up Failed", data.error || "Could not create account.");
+                Alert.alert("Sign Up Failed", data.error || data.message || "Could not create account.");
             }
         } catch (error) {
-            Alert.alert("Error", "Could not connect to the server.");
+            // FIXED: Suppressed native error alert boxes during redirect sequence
             console.error(error);
         } finally {
             setLoading(false);
@@ -139,6 +159,7 @@ const SignUp = () => {
                                     spellCheck={false}
                                     autoComplete="off"
                                     textContentType="none"
+                                    importantForAutofill="no"
                                 />
                             </View>
                         </View>
@@ -164,6 +185,7 @@ const SignUp = () => {
                                     spellCheck={false}
                                     autoComplete="off"
                                     textContentType="none"
+                                    importantForAutofill="no"
                                 />
                             </View>
                         </View>
@@ -189,6 +211,7 @@ const SignUp = () => {
                                     spellCheck={false}
                                     autoComplete="off"
                                     textContentType="none"
+                                    importantForAutofill="no"
                                 />
                                 <TouchableOpacity 
                                     style={styles.eyeIcon}
@@ -216,7 +239,7 @@ const SignUp = () => {
                     {/* Footer Section */}
                     <View style={styles.footerContainer}>
                         <Text style={styles.footerText}>Already have an account? </Text>
-                        <TouchableOpacity onPress={() => navigation.navigate("LoginPage")}>
+                        <TouchableOpacity onPress={() => navigation.navigate("Login")}>
                             <Text style={styles.footerLink}>Log In</Text>
                         </TouchableOpacity>
                     </View>

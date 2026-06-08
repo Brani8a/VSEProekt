@@ -1,0 +1,11 @@
+Flask
+SQLAlchemy
+passlib[bcrypt]
+dotenv
+PyJWT
+psycopg2
+google-genai
+pinecone
+flask_socketio
+firebase-admin
+flask-cors

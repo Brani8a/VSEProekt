@@ -262,7 +262,7 @@ class Workouts(Base):
         
         details = []
         for ex in self.excersizes:
-            details.append(f"{ex.name}: {ex.sets}x{ex.reps} at {ex.weight}kg and additional description:{ex.desc}")
+            details.append(f"{ex.ex_name}: {ex.sets}x{ex.reps} at {ex.weight}kg and additional description:{ex.desc}")
             
         return f"{summary} Exercises included: {', '.join(details)}."
 

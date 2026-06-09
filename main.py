@@ -231,19 +231,47 @@ def delUser():
     except Exception as e :
         return jsonify({"error": f"{e}"}), 500
     
-@app.route("/log_workout/<duration>/<Type>/<Notes>",methods = ["POST"])
-def init_workout(duration,Type,Notes):
+@app.route("/log_workout", methods=["POST"])
+def log_workout():
     try:
-        user_id,userName = auth.extract_user_info_from_acToken()
-        user = User.query.get(user_id)
+        user_id, _ = auth.extract_user_info_from_acToken()
+        data = request.get_json()
+        
+        duration = data.get("duration")
+        workout_type = data.get("type")
+        notes = data.get("notes", "")
 
+        if not duration or not workout_type:
+             return jsonify({"error": "Duration and Type are required"}), 400
+
+        workout_id = crud.init_workout(user_id, duration, workout_type, notes)
+        
+        return jsonify({"message": "Workout initialized successfully", "workout_id": workout_id}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"{e}"}), 500
+    
+@app.route("/save_workout_as_template/<int:workout_id>", methods=["POST"])
+def save_template(workout_id):
+    try:
+        user_id, _ = auth.extract_user_info_from_acToken()
         db = get_db()
-        workout = Workouts(duration_min = duration,type = Type,author = user,notes = Notes)
-        db.add(workout)
+        
+        workout = db.query(Workouts).filter(Workouts.id == workout_id, Workouts.owner_id == user_id).first()
+        if not workout:
+            return jsonify({"error": "Workout not found"}), 404
+            
+        existing_save = db.query(SavedWorkouts).filter_by(workout_id=workout_id, owner_id=user_id).first()
+        if existing_save:
+            return jsonify({"message": "Workout is already saved as a template"}), 200
+            
+        new_save = SavedWorkouts(workout_id=workout_id, owner_id=user_id)
+        db.add(new_save)
         db.commit()
-
-        return jsonify({"message": "Successfully initialized workout"}),200
-    except Exception as e :
+        
+        return jsonify({"message": "Workout saved as template successfully!"}), 200
+        
+    except Exception as e:
         return jsonify({"error": f"{e}"}), 500
 
 @app.route("/add_excersize/<workout_id>/<name>/<rep>/<set>/<weight>/<desc>",methods=["POST"])
@@ -886,21 +914,6 @@ def get_meal_data():
         return jsonify(all_meals),200
     except Exception as e:
         return jsonify({"error":f"{e}"}),500
-    
-@app.route("/save_workout/<Workout_id>",methods = ["POST"])
-def save_workout(Workout_id):
-    try:
-        db = get_db()
-        user_id,_ = auth.extract_user_info_from_acToken()
-
-        workout = SavedWorkouts(owner_id=user_id,workout_id=Workout_id)
-
-        db.add(workout)
-        db.commit()
-
-        return jsonify({"Success":"Workout saved successfully"}),200
-    except Exception as e:
-        return jsonify({"error":f"{e}"}),500
 
 @app.route("/unsave_workout/<Workout_id>",methods = ["DELETE"])
 def unsave_wokrout(Workout_id):
@@ -932,31 +945,71 @@ def list_s_wk():
     except Exception as e:
         return jsonify({"error":f"{e}"}),500
     
-@app.route("/retrieve_recent_workouts",methods = ["GET"])
+@app.route("/retrieve_recent_workouts", methods=["GET"])
 def get_past_wk():
     try:
         db = get_db()
         user_id, _ = auth.extract_user_info_from_acToken()
         
-        past_date = datetime.now() - timedelta(days=7)
+        # Get pagination parameters from URL query (e.g., ?page=1&limit=10)
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        offset = (page - 1) * limit
 
         statement = (
             select(Workouts)
-            .where(Workouts.author_id == user_id)
-            .where(Workouts.created_at >= past_date)
+            .where(Workouts.owner_id == user_id)  # Note: ensure this matches your model (owner_id vs author_id)
             .order_by(desc(Workouts.created_at))
+            .offset(offset)
+            .limit(limit)
         )
         
         workouts = db.execute(statement).scalars().all()
-
-        all_wk = []
-        for workout in workouts:
-            workout_data = crud.list_wk_data(workout.id)
-            all_wk.append(workout_data)
         
-        return jsonify(all_wk), 200
+        # Format the response
+        workout_list = []
+        for wk in workouts:
+            workout_list.append({
+                "id": wk.id,
+                "type": wk.type,
+                "duration_min": wk.duration_min,
+                "notes": wk.notes,
+                "created_at": wk.created_at.isoformat() if wk.created_at else None
+            })
+            
+        return jsonify({
+            "workouts": workout_list,
+            "page": page,
+            "limit": limit
+        }), 200
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"{e}"}), 500
+    
+@app.route("/update_excersize", methods=["PUT"])
+def update_excersize():
+    try:
+        user_id, _ = auth.extract_user_info_from_acToken()
+        data = request.get_json()
+        
+        workout_id = data.get("workout_id")
+        ex_name = data.get("ex_name")
+        new_sets = data.get("sets")
+        new_reps = data.get("reps")
+        new_weight = data.get("weight")
+        
+        if not workout_id or not ex_name:
+            return jsonify({"error": "workout_id and ex_name are required"}), 400
+            
+        updated = crud.update_excersize(workout_id, user_id, ex_name, new_sets, new_reps, new_weight)
+        
+        if updated:
+            return jsonify({"message": "Exercise updated successfully"}), 200
+        else:
+            return jsonify({"error": "Could not update exercise"}), 400
+
+    except Exception as e:
+        return jsonify({"error": f"{e}"}), 500
     
     
 if __name__ == "__main__":

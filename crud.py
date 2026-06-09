@@ -141,6 +141,13 @@ def addExcersize(workout_id,name,rep,set,weight,description):
     db.add(workout)
     db.commit()
 
+def init_workout(user_id, duration, workout_type, notes):
+    workout = Workouts(owner_id=user_id,duration_min = duration,notes=notes,type = workout_type)
+    db = get_db()
+    db.add(workout)
+    db.commit()
+    
+
 def CompWorkouts(workout_id, user_id,):
     db = get_db()
     current_workout = db.query(Workouts).filter_by(

@@ -236,15 +236,12 @@ def log_workout():
     try:
         user_id, _ = auth.extract_user_info_from_acToken()
         data = request.get_json()
-        
-        duration = data.get("duration")
+    
         workout_type = data.get("type")
         notes = data.get("notes", "")
+        name = data.get("name","")
 
-        if not duration or not workout_type:
-             return jsonify({"error": "Duration and Type are required"}), 400
-
-        workout_id = crud.init_workout(user_id, duration, workout_type, notes)
+        workout_id = crud.init_workout(user_id, workout_type, notes,name)
         
         return jsonify({"message": "Workout initialized successfully", "workout_id": workout_id}), 200
 
@@ -299,10 +296,17 @@ def print_wk_data(workout_id):
         return jsonify({"error": f"{e}"}), 500
 
     
-@app.route("/finish_workout/<workout_id>",methods = ["POST"])
-def comp_workouts(workout_id):
+@app.route("/finish_workout/<workout_id>/<duration>",methods = ["POST"])
+def comp_workouts(workout_id,duration):
     try:
         user_id,_ = auth.extract_user_info_from_acToken()
+
+        db = get_db()
+        wk = Workouts.query.get(workout_id)
+        wk.duration_min = duration
+        db.add()
+        db.commit()
+
         crud.update_vector_db(workout_id,user_id)
         has_progressed = crud.CompWorkouts(workout_id,user_id)
             
@@ -973,6 +977,7 @@ def get_past_wk():
                 "id": wk.id,
                 "type": wk.type,
                 "duration_min": wk.duration_min,
+                "name":wk.name,
                 "notes": wk.notes,
                 "created_at": wk.created_at.isoformat() if wk.created_at else None
             })
